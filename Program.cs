@@ -1,5 +1,9 @@
+using Npgsql;
 using HoneyRaesAPI.Models;
 using HoneyRaesAPI.Models.DTOs;
+
+var connectionString = "Host=localhost;Port=5432;Username=postgres;Password=Ijwmttgwh3w#;Database=HoneyRaes";
+
 List<Customer> customers = new List<Customer> 
 { 
     new Customer()
@@ -106,16 +110,33 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/employees", () => 
+app.MapGet("/employees", () =>
 {
-    return employees.Select(e => new EmployeeDTO
+    // create an empty list of employees to add to. 
+    List<Employee> employees = new List<Employee>();
+    //make a connection to the PostgreSQL database using the connection string
+    using NpgsqlConnection connection = new NpgsqlConnection(connectionString);
+    //open the connection
+    connection.Open();
+    // create a sql command to send to the database
+    using NpgsqlCommand command = connection.CreateCommand();
+    command.CommandText = "SELECT * FROM Employee";
+    //send the command. 
+    using NpgsqlDataReader reader = command.ExecuteReader();
+    //read the results of the command row by row
+    while (reader.Read()) // reader.Read() returns a boolean, to say whether there is a row or not, it also advances down to that row if it's there. 
     {
-        Id = e.Id,
-        Name = e.Name,
-        Specialty = e.Specialty
-    });
-}
-);
+        //This code adds a new C# employee object with the data in the current row of the data reader 
+        employees.Add(new Employee
+        {
+            Id = reader.GetInt32(reader.GetOrdinal("Id")), //find what position the Id column is in, then get the integer stored at that position
+            Name = reader.GetString(reader.GetOrdinal("Name")),
+            Specialty = reader.GetString(reader.GetOrdinal("Specialty"))
+        });
+    }
+    //once all the rows have been read, send the list of employees back to the client as JSON
+    return employees;
+});
 
 app.MapGet("/employees/{id}", (int id) =>
 {
