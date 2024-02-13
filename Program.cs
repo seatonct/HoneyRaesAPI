@@ -140,27 +140,58 @@ app.MapGet("/employees", () =>
 
 app.MapGet("/employees/{id}", (int id) =>
 {
-    Employee employee = employees.FirstOrDefault(e => e.Id == id);
-    if (employee == null)
+    Employee employee = null;
+    using NpgsqlConnection connection = new NpgsqlConnection(connectionString);
+    connection.Open();
+    using NpgsqlCommand command = connection.CreateCommand();
+    command.CommandText = @"
+        SELECT 
+            e.Id,
+            e.Name, 
+            e.Specialty, 
+            st.Id AS serviceTicketId, 
+            st.CustomerId,
+            st.Description,
+            st.Emergency,
+            st.DateCompleted 
+        FROM Employee e
+        LEFT JOIN ServiceTicket st ON st.EmployeeId = e.Id
+        WHERE e.Id = @id";
+    // use command parameters to add the specific Id we are looking for to the query
+    command.Parameters.AddWithValue("@id", id);
+    using NpgsqlDataReader reader = command.ExecuteReader();
+    // We are only expecting one row back, so we don't need a loop!
+    while (reader.Read())
     {
-        return Results.NotFound();
-    }
-    List<ServiceTicket> tickets = serviceTickets.Where(st => st.EmployeeId == id).ToList();
-    return Results.Ok(new EmployeeDTO
-    {
-        Id = employee.Id,
-        Name = employee.Name,
-        Specialty = employee.Specialty,
-        ServiceTickets = tickets.Select(t => new ServiceTicketDTO
+        if (employee == null)
         {
-            Id = t.Id,
-            CustomerId = t.CustomerId,
-            EmployeeId = t.EmployeeId,
-            Description = t.Description,
-            Emergency = t.Emergency,
-            DateCompleted = t.DateCompleted
-        }).ToList()
-    });
+            employee = new Employee
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("Id")),
+                Name = reader.GetString(reader.GetOrdinal("Name")),
+                Specialty = reader.GetString(reader.GetOrdinal("Specialty")),
+                ServiceTickets = new List<ServiceTicket>() //empty List to add service tickets to
+            };
+        }
+        // reader.IsDBNull checks if a column in a particular position is null
+        if (!reader.IsDBNull(reader.GetOrdinal("serviceTicketId")))
+        {
+            employee.ServiceTickets.Add(new ServiceTicket
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("serviceTicketId")),
+                CustomerId = reader.GetInt32(reader.GetOrdinal("CustomerId")),
+                //we don't need to get this from the database, we already know it
+                EmployeeId = id,
+                Description = reader.GetString(reader.GetOrdinal("Description")),
+                Emergency = reader.GetBoolean(reader.GetOrdinal("Emergency")),
+                // Npgsql can't automatically convert NULL in the database to C# null, so we have to check whether it's null before trying to get it
+                DateCompleted = reader.IsDBNull(reader.GetOrdinal("DateCompleted")) ? null : reader.GetDateTime(reader.GetOrdinal("DateCompleted"))
+            });
+        }
+    }
+     // Return 404 if the employee is never set (meaning, that reader.Read() immediately returned false because the id did not match an employee)
+    // otherwise 200 with the employee data
+    return employee == null ? Results.NotFound() : Results.Ok(employee);
 });
 
 app.MapGet("/customers", () => 
