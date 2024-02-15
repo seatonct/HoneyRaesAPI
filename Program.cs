@@ -110,6 +110,48 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.MapPost("/employees", (Employee employee) =>
+{
+    using NpgsqlConnection connection = new NpgsqlConnection(connectionString);
+    connection.Open();
+    using NpgsqlCommand command = connection.CreateCommand();
+    command.CommandText = @"
+        INSERT INTO Employee (Name, Specialty)
+        VALUES (@name, @specialty)
+        RETURNING Id
+    ";
+    command.Parameters.AddWithValue("@name", employee.Name);
+    command.Parameters.AddWithValue("@specialty", employee.Specialty);
+
+    //the database will return the new Id for the employee, add it to the C# object
+    employee.Id = (int)command.ExecuteScalar();
+
+    return employee;
+});
+
+app.MapPut("/employees/{id}", (int id, Employee employee) =>
+{
+    if (id != employee.Id)
+    {
+        return Results.BadRequest();
+    }
+    using NpgsqlConnection connection = new NpgsqlConnection(connectionString);
+    connection.Open();
+    using NpgsqlCommand command = connection.CreateCommand();
+    command.CommandText = @"
+        UPDATE Employee 
+        SET Name = @name,
+            Specialty = @specialty
+        WHERE Id = @id
+    ";
+    command.Parameters.AddWithValue("@name", employee.Name);
+    command.Parameters.AddWithValue("@specialty", employee.Specialty);
+    command.Parameters.AddWithValue("@id", id);
+
+    command.ExecuteNonQuery();
+    return Results.NoContent();
+});
+
 app.MapGet("/employees", () =>
 {
     // create an empty list of employees to add to. 
