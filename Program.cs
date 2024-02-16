@@ -236,6 +236,19 @@ app.MapGet("/employees/{id}", (int id) =>
     return employee == null ? Results.NotFound() : Results.Ok(employee);
 });
 
+app.MapDelete("/employees/{id}", (int id) =>
+{
+    using NpgsqlConnection connection = new NpgsqlConnection(connectionString);
+    connection.Open();
+    using NpgsqlCommand command = connection.CreateCommand();
+    command.CommandText = @"
+        DELETE FROM Employee WHERE Id=@id
+    ";
+    command.Parameters.AddWithValue("@id", id);
+    command.ExecuteNonQuery();
+    return Results.NoContent();
+});
+
 app.MapGet("/customers", () => 
 {
     return customers.Select(c => new CustomerDTO
