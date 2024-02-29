@@ -286,19 +286,31 @@ app.MapGet("/customers/{id}", (int id) =>
 }
 );
 
-app.MapGet("/servicetickets", () => 
+app.MapGet("/servicetickets", () =>
 {
-    return serviceTickets.Select(t => new ServiceTicketDTO
+    List<ServiceTicket> serviceTickets = new List<ServiceTicket>();
+    using NpgsqlConnection connection = new NpgsqlConnection(connectionString);
+    connection.Open();
+    using NpgsqlCommand command = connection.CreateCommand();
+    command.CommandText = @"
+    SELECT * FROM ServiceTicket
+    ";
+    using NpgsqlDataReader reader = command.ExecuteReader();
+    while (reader.Read())
     {
-        Id = t.Id,
-        CustomerId = t.CustomerId,
-        EmployeeId = t.EmployeeId,
-        Description = t.Description,
-        Emergency = t.Emergency,
-        DateCompleted = t.DateCompleted
-    });
-}
-);
+        serviceTickets.Add(new ServiceTicket
+        {
+            Id = reader.GetInt32(reader.GetOrdinal("Id")),
+            CustomerId = reader.GetInt32(reader.GetOrdinal("CustomerId")),
+            EmployeeId = reader.IsDBNull(reader.GetOrdinal("EmployeeId")) ? null : reader.GetInt32(reader.GetOrdinal("EmployeeId")),
+            Description = reader.GetString(reader.GetOrdinal("Description")),
+            Emergency = reader.GetBoolean(reader.GetOrdinal("Emergency")),
+            DateCompleted = reader.IsDBNull(reader.GetOrdinal("DateCompleted")) ?
+                null : reader.GetDateTime(reader.GetOrdinal("DateCompleted"))
+        });
+    }
+    return serviceTickets;
+});
 
 app.MapGet("/servicetickets/{id}", (int id) =>
 {
